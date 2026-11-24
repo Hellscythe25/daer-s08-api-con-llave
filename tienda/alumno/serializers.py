@@ -20,36 +20,56 @@ class CategoriaSerializer(serializers.ModelSerializer):
 
 
 class ProductoSerializer(serializers.ModelSerializer):
-    # TODO 1. Un campo de solo lectura `categoria_nombre` con el nombre de la categoría
-    #         (pista: CharField con source='categoria.nombre' y read_only=True).
+    # Se muestra el nombre de la categoría, pero no se puede escribir: la categoría se elige por su id.
+    categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
 
     class Meta:
         model = Producto
-        # TODO 2. La lista EXPLÍCITA de campos públicos:
-        #         id, nombre, categoria, categoria_nombre, precio, stock, descripcion.
-        #         `costo` es interno: no puede salir por la API. ¿Por qué no sirve '__all__'?
-        fields = ['id', 'nombre']
+        # Lista EXPLÍCITA: `costo` no está, así que ni sale en las respuestas ni se acepta al escribir.
+        # Con '__all__', cualquier campo que se agregue mañana al modelo saldría por la API sin que nadie lo decida.
+        fields = ['id', 'nombre', 'categoria', 'categoria_nombre', 'precio', 'stock', 'descripcion']
 
-    # TODO 3. validate_nombre: rechazar un nombre que ya exista SIN distinguir mayúsculas
-    #         («FANTA 500ML» ya existe). Al editar, el propio producto no cuenta como repetido.
-    # TODO 4. validate_precio: el precio tiene que ser mayor que cero.
-    # TODO 5. validate_stock: el stock no puede ser negativo.
-    # Cada validate_<campo>(self, valor) devuelve el valor o lanza serializers.ValidationError('mensaje').
+    def validate_nombre(self, valor):
+        repetidos = Producto.objects.filter(nombre__iexact=valor)
+        if self.instance is not None:  # al editar, el propio producto no cuenta como repetido
+            repetidos = repetidos.exclude(pk=self.instance.pk)
+        if repetidos.exists():
+            raise serializers.ValidationError('Ya existe un producto con ese nombre.')
+        return valor
+
+    def validate_precio(self, valor):
+        if valor <= 0:
+            raise serializers.ValidationError('El precio debe ser mayor que cero.')
+        return valor
+
+    def validate_stock(self, valor):
+        if valor < 0:
+            raise serializers.ValidationError('El stock no puede ser negativo.')
+        return valor
 
 
 class LineaPedidoSerializer(serializers.ModelSerializer):
-    # TODO 6. `producto` como el NOMBRE del producto (solo lectura) y `subtotal` = cantidad × precio_unitario,
-    #         como texto con dos decimales (pista: SerializerMethodField y f'{valor:.2f}').
+    producto = serializers.CharField(source='producto.nombre', read_only=True)
+    subtotal = serializers.SerializerMethodField()
 
     class Meta:
         model = LineaPedido
-        fields = ['cantidad', 'precio_unitario']
+        fields = ['producto', 'cantidad', 'precio_unitario', 'subtotal']
+
+    def get_subtotal(self, linea):
+        return f'{linea.cantidad * linea.precio_unitario:.2f}'
 
 
 class PedidoSerializer(serializers.ModelSerializer):
-    # TODO 7. `cliente` como el nombre del cliente, `lineas` con LineaPedidoSerializer(many=True, read_only=True)
-    #         y `total` = suma de los subtotales, como texto con dos decimales. Todo de solo lectura.
+    cliente = serializers.CharField(source='cliente.nombre', read_only=True)
+    lineas = LineaPedidoSerializer(many=True, read_only=True)
+    total = serializers.SerializerMethodField()
 
     class Meta:
         model = Pedido
-        fields = ['id', 'fecha', 'estado']
+        fields = ['id', 'cliente', 'fecha', 'estado', 'lineas', 'total']
+        read_only_fields = fields  # por la API un pedido se consulta o se anula, no se edita
+
+    def get_total(self, pedido):
+        # .all() reutiliza las líneas que trajo prefetch_related: no hace una consulta por pedido.
+        return f'{sum(linea.cantidad * linea.precio_unitario for linea in pedido.lineas.all()):.2f}'
