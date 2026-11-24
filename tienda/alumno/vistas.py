@@ -10,13 +10,14 @@ hechas, como ejemplo, salvo sus permisos. Comprueben con:
     python manage.py duelo
 """
 
+from django.db.models import Q
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from tienda.models import Categoria
+from tienda.models import Categoria, Pedido, Producto
 
-from .serializers import CategoriaSerializer
+from .serializers import CategoriaSerializer, PedidoSerializer, ProductoSerializer
 
 
 class PorHacer(APIView):
@@ -45,27 +46,41 @@ class CategoriaDetalle(generics.RetrieveUpdateDestroyAPIView):
     # TODO P3-2. permission_classes
 
 
-class ProductoLista(PorHacer):
-    """TODO P2-1. ListCreateAPIView de productos, con:
-    - select_related('categoria'), para que la lista sea UNA consulta aunque muestre categoria_nombre;
-    - ?categoria=<nombre> sin distinguir mayúsculas;
-    - ?q=<texto> en el nombre O en la descripción (objetos Q, como en la S07).
-    Pista: sobrescriban get_queryset(self) y lean self.request.query_params.get('categoria').
-    TODO P3-2. Sus permission_classes.
-    """
+class ProductoLista(generics.ListCreateAPIView):
+    """Lista y alta de productos, con ?categoria=<nombre> y ?q=<texto>."""
+
+    serializer_class = ProductoSerializer
+    # TODO P3-2. permission_classes
+
+    def get_queryset(self):
+        # select_related: la categoría viene en el mismo JOIN, así categoria_nombre no hace una consulta por fila.
+        productos = Producto.objects.select_related('categoria')
+        categoria = self.request.query_params.get('categoria')
+        if categoria:
+            productos = productos.filter(categoria__nombre__iexact=categoria)
+        texto = self.request.query_params.get('q')
+        if texto:
+            productos = productos.filter(Q(nombre__icontains=texto) | Q(descripcion__icontains=texto))
+        return productos
 
 
-class ProductoDetalle(PorHacer):
-    """TODO P2-2. RetrieveUpdateDestroyAPIView de un producto. TODO P3-2. Sus permission_classes."""
+class ProductoDetalle(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Producto.objects.select_related('categoria')
+    serializer_class = ProductoSerializer
+    # TODO P3-2. permission_classes
 
 
-class PedidoLista(PorHacer):
-    """TODO P2-3. ListAPIView de pedidos con sus líneas, sin N+1 (select_related + prefetch_related).
-    TODO P3-3. Solo con credenciales: los pedidos traen datos de clientes."""
+class PedidoLista(generics.ListAPIView):
+    # Cliente en el JOIN y todas las líneas con su producto en una segunda consulta: sin N+1.
+    queryset = Pedido.objects.select_related('cliente').prefetch_related('lineas__producto')
+    serializer_class = PedidoSerializer
+    # TODO P3-3. Solo con credenciales: los pedidos traen datos de clientes.
 
 
-class PedidoDetalle(PorHacer):
-    """TODO P2-4. RetrieveAPIView de un pedido. TODO P3-3. Solo con credenciales."""
+class PedidoDetalle(generics.RetrieveAPIView):
+    queryset = Pedido.objects.select_related('cliente').prefetch_related('lineas__producto')
+    serializer_class = PedidoSerializer
+    # TODO P3-3. Solo con credenciales.
 
 
 class AnularPedido(PorHacer):
