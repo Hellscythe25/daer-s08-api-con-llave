@@ -11,6 +11,7 @@ hechas, como ejemplo, salvo sus permisos. Comprueben con:
 """
 
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -20,37 +21,35 @@ from tienda.models import Categoria, Pedido, Producto
 from .serializers import CategoriaSerializer, PedidoSerializer, ProductoSerializer
 
 
-class PorHacer(APIView):
-    """Responde 501 («no implementado») a todo. Reemplácenla por la vista de verdad."""
+class SoloPersonalEscribe(permissions.BasePermission):
+    """Cualquiera lee (GET, HEAD, OPTIONS); solo el personal de la tienda (is_staff) crea, cambia o borra."""
 
-    def por_hacer(self, request, *args, **kwargs):
-        return Response({'detail': f'{type(self).__name__} está por hacer.'}, status=status.HTTP_501_NOT_IMPLEMENTED)
+    message = 'Solo el personal de la tienda puede cambiar el catálogo.'
 
-    get = post = put = patch = delete = por_hacer
-
-
-# TODO P3-1. Un permiso propio, SoloPersonalEscribe (subclase de permissions.BasePermission):
-#            cualquiera puede leer (métodos SAFE_METHODS: GET, HEAD, OPTIONS); crear, cambiar o borrar,
-#            solo el personal de la tienda (request.user.is_staff). Úsenlo en categorías y productos.
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        # Un anónimo no es staff: DRF responde 401 si no mandó credenciales y 403 si las mandó y no alcanzan.
+        return bool(request.user and request.user.is_staff)
 
 
 class CategoriaLista(generics.ListCreateAPIView):
     queryset = Categoria.objects.all()
     serializer_class = CategoriaSerializer
-    # TODO P3-2. permission_classes
+    permission_classes = [SoloPersonalEscribe]
 
 
 class CategoriaDetalle(generics.RetrieveUpdateDestroyAPIView):
     queryset = Categoria.objects.all()
     serializer_class = CategoriaSerializer
-    # TODO P3-2. permission_classes
+    permission_classes = [SoloPersonalEscribe]
 
 
 class ProductoLista(generics.ListCreateAPIView):
     """Lista y alta de productos, con ?categoria=<nombre> y ?q=<texto>."""
 
     serializer_class = ProductoSerializer
-    # TODO P3-2. permission_classes
+    permission_classes = [SoloPersonalEscribe]
 
     def get_queryset(self):
         # select_related: la categoría viene en el mismo JOIN, así categoria_nombre no hace una consulta por fila.
@@ -67,30 +66,31 @@ class ProductoLista(generics.ListCreateAPIView):
 class ProductoDetalle(generics.RetrieveUpdateDestroyAPIView):
     queryset = Producto.objects.select_related('categoria')
     serializer_class = ProductoSerializer
-    # TODO P3-2. permission_classes
+    permission_classes = [SoloPersonalEscribe]
 
 
 class PedidoLista(generics.ListAPIView):
     # Cliente en el JOIN y todas las líneas con su producto en una segunda consulta: sin N+1.
     queryset = Pedido.objects.select_related('cliente').prefetch_related('lineas__producto')
     serializer_class = PedidoSerializer
-    # TODO P3-3. Solo con credenciales: los pedidos traen datos de clientes.
+    permission_classes = [permissions.IsAuthenticated]  # los pedidos traen datos de clientes
 
 
 class PedidoDetalle(generics.RetrieveAPIView):
     queryset = Pedido.objects.select_related('cliente').prefetch_related('lineas__producto')
     serializer_class = PedidoSerializer
-    # TODO P3-3. Solo con credenciales.
+    permission_classes = [permissions.IsAuthenticated]
 
 
-class AnularPedido(PorHacer):
-    """TODO P3-4. APIView con un método post(self, request, pk) que:
-    - responde 404 si el pedido no existe (pista: get_object_or_404, no Pedido.objects.get);
-    - responde 409 si ya estaba anulado;
-    - si no, lo pasa a anulado y devuelve el pedido con PedidoSerializer.
-    Solo el personal de la tienda puede anular (permissions.IsAdminUser).
-    """
+class AnularPedido(APIView):
+    """POST /api/pedidos/<pk>/anular/: solo el personal; 404 si no existe, 409 si ya estaba anulado."""
 
+    permission_classes = [permissions.IsAdminUser]
 
-# Para no dejar imports sin usar mientras completan: bórrenlo cuando ya usen `permissions`.
-_ = permissions
+    def post(self, request, pk):
+        pedido = get_object_or_404(Pedido, pk=pk)  # Pedido.objects.get daría un 500 con un id inexistente
+        if pedido.estado == Pedido.ANULADO:
+            return Response({'detail': 'El pedido ya estaba anulado.'}, status=status.HTTP_409_CONFLICT)
+        pedido.estado = Pedido.ANULADO
+        pedido.save(update_fields=['estado'])
+        return Response(PedidoSerializer(pedido).data)
