@@ -33,6 +33,12 @@ class ProductoSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Ya existe un producto con ese nombre.')
         return value
 
+    # CORREGIDO (fallo 2): el modelo acepta precio 0 y la IA no lo validaba.
+    def validate_precio(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('El precio debe ser mayor que cero.')
+        return value
+
     def validate_stock(self, value):
         if value < 0:
             raise serializers.ValidationError('El stock no puede ser negativo.')
