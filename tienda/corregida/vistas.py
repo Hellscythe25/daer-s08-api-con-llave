@@ -3,7 +3,7 @@
 #    con cuenta; anular un pedido, solo el personal de la tienda. Filtros ?categoria= y ?q= en productos.»
 # Su respuesta: «¡Hecho! Usé los permisos estándar de DRF, así no reinventamos la rueda.»
 #
-# NO editen este archivo: para la Parte 4 cópienlo con `python manage.py duelo --iniciar-corregida`.
+# Copia corregida de tienda/ia/ (Parte 4). Cada arreglo lleva un comentario «CORREGIDO».
 
 from django.db.models import Q
 from rest_framework import generics, permissions, status

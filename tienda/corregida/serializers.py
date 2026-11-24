@@ -3,7 +3,7 @@
 #    Que no se puedan registrar productos repetidos ni con stock negativo.»
 # Su respuesta: «¡Listo! Usé ModelSerializer para aprovechar las validaciones del modelo y no repetir código.»
 #
-# NO editen este archivo: para la Parte 4 cópienlo con `python manage.py duelo --iniciar-corregida`.
+# Copia corregida de tienda/ia/ (Parte 4). Cada arreglo lleva un comentario «CORREGIDO».
 
 from rest_framework import serializers
 
@@ -21,7 +21,9 @@ class ProductoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Producto
-        fields = '__all__'  # así, si el modelo crece, la API se actualiza sola
+        # CORREGIDO (fallo 1): '__all__' sacaba el costo interno por la API y lo dejaba escribir.
+        # Lista explícita: un campo nuevo del modelo no sale hasta que alguien lo agregue aquí.
+        fields = ['id', 'nombre', 'categoria', 'categoria_nombre', 'precio', 'stock', 'descripcion']
 
     def validate_nombre(self, value):
         qs = Producto.objects.filter(nombre__iexact=value)
