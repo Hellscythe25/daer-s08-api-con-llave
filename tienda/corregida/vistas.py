@@ -6,6 +6,7 @@
 # Copia corregida de tienda/ia/ (Parte 4). Cada arreglo lleva un comentario «CORREGIDO».
 
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -71,7 +72,8 @@ class AnularPedido(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def post(self, request, pk):
-        pedido = Pedido.objects.get(pk=pk)
+        # CORREGIDO (fallo 4): Pedido.objects.get lanzaba DoesNotExist (500) con un id inexistente.
+        pedido = get_object_or_404(Pedido, pk=pk)
         if pedido.estado == Pedido.ANULADO:
             return Response({'detail': 'El pedido ya estaba anulado.'}, status=status.HTTP_409_CONFLICT)
         pedido.estado = Pedido.ANULADO
