@@ -17,7 +17,11 @@ from .serializers import CategoriaSerializer, PedidoSerializer, ProductoSerializ
 
 class EsPersonalOSoloLectura(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.method in permissions.SAFE_METHODS or request.user.is_staff
+        return request.method in permissions.SAFE_METHODS or bool(request.user and request.user.is_staff)
+
+
+# CORREGIDO (fallo 3): IsAuthenticatedOrReadOnly deja escribir a CUALQUIER usuario con cuenta,
+# también al agente. El catálogo lo cambia solo el personal, como en las categorías.
 
 
 class CategoriaLista(generics.ListCreateAPIView):
@@ -34,7 +38,7 @@ class CategoriaDetalle(generics.RetrieveUpdateDestroyAPIView):
 
 class ProductoLista(generics.ListCreateAPIView):
     serializer_class = ProductoSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [EsPersonalOSoloLectura]
 
     def get_queryset(self):
         qs = Producto.objects.select_related('categoria')
@@ -48,7 +52,7 @@ class ProductoLista(generics.ListCreateAPIView):
 class ProductoDetalle(generics.RetrieveUpdateDestroyAPIView):
     queryset = Producto.objects.select_related('categoria')
     serializer_class = ProductoSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [EsPersonalOSoloLectura]
 
 
 class PedidoLista(generics.ListAPIView):
